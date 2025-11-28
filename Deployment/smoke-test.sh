@@ -91,8 +91,9 @@ fi
 
 # Test Keycloak access within cluster (direct)
 echo -e "${YELLOW}→ Testing Keycloak direct access within cluster...${NC}"
-KEYCLOAK_STATUS=$(kubectl run test-keycloak-direct --rm -i --restart=Never --image=curlimages/curl --timeout=30s -- \
-  curl -s -o /dev/null -w "%{http_code}" http://keycloak.default.svc.cluster.local:8080 2>/dev/null || echo "000")
+KEYCLOAK_OUTPUT=$(kubectl run test-keycloak-direct --rm -i --restart=Never --image=curlimages/curl --timeout=30s -- \
+  curl -s -o /dev/null -w "%{http_code}\n" http://keycloak.default.svc.cluster.local:8080 2>&1)
+KEYCLOAK_STATUS=$(echo "$KEYCLOAK_OUTPUT" | grep -oE '\b[0-9]{3}\b' | head -1 || echo "000")
 
 if [ "$KEYCLOAK_STATUS" = "200" ] || [ "$KEYCLOAK_STATUS" = "302" ] || [ "$KEYCLOAK_STATUS" = "401" ]; then
     echo -e "${GREEN}✓ Keycloak is accessible directly within cluster (HTTP $KEYCLOAK_STATUS)${NC}"
@@ -103,8 +104,9 @@ fi
 
 # Test Keycloak through NGINX reverse proxy (internal)
 echo -e "${YELLOW}→ Testing Keycloak through NGINX reverse proxy (internal)...${NC}"
-NGINX_STATUS=$(kubectl run test-nginx-internal --rm -i --restart=Never --image=curlimages/curl --timeout=30s -- \
-  curl -k -s -o /dev/null -w "%{http_code}" https://nginx-proxy.default.svc.cluster.local 2>/dev/null || echo "000")
+NGINX_OUTPUT=$(kubectl run test-nginx-internal --rm -i --restart=Never --image=curlimages/curl --timeout=30s -- \
+  curl -k -s -o /dev/null -w "%{http_code}\n" https://nginx-proxy.default.svc.cluster.local 2>&1)
+NGINX_STATUS=$(echo "$NGINX_OUTPUT" | grep -oE '\b[0-9]{3}\b' | head -1 || echo "000")
 
 if [ "$NGINX_STATUS" = "200" ] || [ "$NGINX_STATUS" = "302" ] || [ "$NGINX_STATUS" = "401" ]; then
     echo -e "${GREEN}✓ Keycloak accessible through NGINX internally (HTTP $NGINX_STATUS)${NC}"
@@ -139,8 +141,9 @@ if [ -z "$NODE_IP" ]; then
 fi
 
 if [ -n "$NODE_IP" ]; then
-    NODEPORT_STATUS=$(kubectl run test-nodeport --rm -i --restart=Never --image=curlimages/curl --timeout=30s -- \
-      curl -k -s -o /dev/null -w "%{http_code}" https://$NODE_IP:$NODEPORT 2>/dev/null || echo "000")
+    NODEPORT_OUTPUT=$(kubectl run test-nodeport --rm -i --restart=Never --image=curlimages/curl --timeout=30s -- \
+      curl -k -s -o /dev/null -w "%{http_code}\n" https://$NODE_IP:$NODEPORT 2>&1)
+    NODEPORT_STATUS=$(echo "$NODEPORT_OUTPUT" | grep -oE '\b[0-9]{3}\b' | head -1 || echo "000")
     
     if [ "$NODEPORT_STATUS" = "200" ] || [ "$NODEPORT_STATUS" = "302" ] || [ "$NODEPORT_STATUS" = "401" ]; then
         echo -e "${GREEN}✓ NodePort is accessible (HTTP $NODEPORT_STATUS)${NC}"
