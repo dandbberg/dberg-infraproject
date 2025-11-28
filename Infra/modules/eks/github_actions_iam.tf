@@ -67,14 +67,14 @@ resource "aws_iam_role_policy" "github_actions_eks" {
       {
         Effect = "Allow"
         Action = [
-          "eks:ListClusters"
+          "eks:ListClusters",
+          "eks:DescribeCluster"
         ]
         Resource = "*"
       },
       {
         Effect = "Allow"
         Action = [
-          "eks:DescribeCluster",
           "eks:AccessKubernetesApi"
         ]
         Resource = module.eks.cluster_arn
