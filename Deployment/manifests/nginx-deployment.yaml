@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-proxy
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx-proxy
+  template:
+    metadata:
+      labels:
+        app: nginx-proxy
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:latest
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              rm -f /etc/nginx/conf.d/* && \
+              nginx -g "daemon off;";
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+            - name: tls
+              mountPath: /etc/nginx/tls
+          ports:
+            - containerPort: 443
+              name: https
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: nginx-config
+        - name: tls
+          secret:
+            secretName: nginx-tls
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-proxy
+  namespace: default
+spec:
+  selector:
+    app: nginx-proxy
+  type: ClusterIP
+  ports:
+    - port: 443
+      targetPort: 443
+      protocol: TCP
+      name: https
+

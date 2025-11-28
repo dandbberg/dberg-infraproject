@@ -1,0 +1,63 @@
+name: Deploy to EKS
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Deployment/**'
+      - '.github/workflows/deploy-eks.yml'
+  workflow_dispatch:
+
+env:
+  AWS_REGION: eu-west-1
+  CLUSTER_NAME: dberg-perf-cluster
+
+jobs:
+  deploy:
+    name: Deploy to EKS
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'latest'
+
+      - name: Configure kubectl for EKS
+        run: |
+          aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.CLUSTER_NAME }}
+
+      - name: Verify cluster connection
+        run: |
+          kubectl cluster-info
+          kubectl get nodes
+
+      - name: Deploy Keycloak and NGINX
+        run: |
+          cd Deployment
+          ./deploy.sh
+
+      - name: Verify deployment
+        run: |
+          kubectl get deployments
+          kubectl get services
+          kubectl get ingress
+
