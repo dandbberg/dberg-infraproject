@@ -47,20 +47,27 @@ else
     exit 1
 fi
 
-# Check if ingress or NodePort exists
-echo -e "${YELLOW}→ Checking external exposure...${NC}"
-if kubectl get ingress nginx-proxy-ingress &>/dev/null; then
-    echo -e "${GREEN}✓ Ingress is configured${NC}"
-elif kubectl get service nginx-proxy-nodeport &>/dev/null; then
-    NODEPORT=$(kubectl get service nginx-proxy-nodeport -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "")
-    if [ -n "$NODEPORT" ]; then
-        echo -e "${GREEN}✓ NodePort service is configured on port $NODEPORT${NC}"
-    else
-        echo -e "${YELLOW}⚠ NodePort service found but port not available${NC}"
-    fi
-else
-    echo -e "${YELLOW}⚠ No external exposure method found (Ingress or NodePort)${NC}"
+# Verify NodePort service exists and is configured
+echo -e "${YELLOW}→ Verifying NodePort service...${NC}"
+if ! kubectl get service nginx-proxy-nodeport &>/dev/null; then
+    echo -e "${RED}✗ NodePort service 'nginx-proxy-nodeport' not found${NC}"
+    exit 1
 fi
+
+NODEPORT=$(kubectl get service nginx-proxy-nodeport -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "")
+SERVICE_TYPE=$(kubectl get service nginx-proxy-nodeport -o jsonpath='{.spec.type}' 2>/dev/null || echo "")
+
+if [ "$SERVICE_TYPE" != "NodePort" ]; then
+    echo -e "${RED}✗ Service type is $SERVICE_TYPE, expected NodePort${NC}"
+    exit 1
+fi
+
+if [ -z "$NODEPORT" ]; then
+    echo -e "${RED}✗ NodePort number not found${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✓ NodePort service is configured on port $NODEPORT${NC}"
 
 # Verify Keycloak is ClusterIP (internal only)
 echo -e "${YELLOW}→ Verifying Keycloak service type...${NC}"
@@ -82,15 +89,70 @@ else
     exit 1
 fi
 
-# Test internal connectivity
-echo -e "${YELLOW}→ Testing internal connectivity...${NC}"
-if kubectl run test-curl --rm -i --restart=Never --image=curlimages/curl -- curl -k -s -o /dev/null -w "%{http_code}" https://nginx-proxy.default.svc.cluster.local 2>/dev/null | grep -q "200\|302\|401"; then
-    echo -e "${GREEN}✓ NGINX reverse proxy is reachable internally${NC}"
+# Test Keycloak access within cluster (direct)
+echo -e "${YELLOW}→ Testing Keycloak direct access within cluster...${NC}"
+KEYCLOAK_STATUS=$(kubectl run test-keycloak-direct --rm -i --restart=Never --image=curlimages/curl --timeout=30s -- \
+  curl -s -o /dev/null -w "%{http_code}" http://keycloak.default.svc.cluster.local:8080 2>/dev/null || echo "000")
+
+if [ "$KEYCLOAK_STATUS" = "200" ] || [ "$KEYCLOAK_STATUS" = "302" ] || [ "$KEYCLOAK_STATUS" = "401" ]; then
+    echo -e "${GREEN}✓ Keycloak is accessible directly within cluster (HTTP $KEYCLOAK_STATUS)${NC}"
 else
-    echo -e "${YELLOW}⚠ Could not verify internal connectivity (may need time to propagate)${NC}"
+    echo -e "${RED}✗ Keycloak direct access failed (HTTP $KEYCLOAK_STATUS)${NC}"
+    exit 1
+fi
+
+# Test Keycloak through NGINX reverse proxy (internal)
+echo -e "${YELLOW}→ Testing Keycloak through NGINX reverse proxy (internal)...${NC}"
+NGINX_STATUS=$(kubectl run test-nginx-internal --rm -i --restart=Never --image=curlimages/curl --timeout=30s -- \
+  curl -k -s -o /dev/null -w "%{http_code}" https://nginx-proxy.default.svc.cluster.local 2>/dev/null || echo "000")
+
+if [ "$NGINX_STATUS" = "200" ] || [ "$NGINX_STATUS" = "302" ] || [ "$NGINX_STATUS" = "401" ]; then
+    echo -e "${GREEN}✓ Keycloak accessible through NGINX internally (HTTP $NGINX_STATUS)${NC}"
+else
+    echo -e "${RED}✗ NGINX to Keycloak path failed (HTTP $NGINX_STATUS)${NC}"
+    exit 1
+fi
+
+# Test Keycloak OpenID configuration endpoint through NGINX
+echo -e "${YELLOW}→ Testing Keycloak OpenID configuration endpoint...${NC}"
+OPENID_RESPONSE=$(kubectl run test-openid --rm -i --restart=Never --image=curlimages/curl --timeout=30s -- \
+  curl -k -s https://nginx-proxy.default.svc.cluster.local/realms/master/.well-known/openid-configuration 2>/dev/null || echo "")
+
+if [ -z "$OPENID_RESPONSE" ]; then
+    echo -e "${RED}✗ OpenID configuration endpoint returned empty response${NC}"
+    exit 1
+fi
+
+# Check if response contains expected OpenID fields
+if echo "$OPENID_RESPONSE" | grep -q "issuer" && echo "$OPENID_RESPONSE" | grep -q "authorization_endpoint"; then
+    echo -e "${GREEN}✓ OpenID configuration endpoint is accessible and returns valid JSON${NC}"
+else
+    echo -e "${RED}✗ OpenID configuration endpoint response is invalid${NC}"
+    exit 1
+fi
+
+# Test NodePort access (from within cluster, simulating external access)
+echo -e "${YELLOW}→ Testing NodePort access...${NC}"
+NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="ExternalIP")].address}' 2>/dev/null)
+if [ -z "$NODE_IP" ]; then
+    NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null)
+fi
+
+if [ -n "$NODE_IP" ]; then
+    NODEPORT_STATUS=$(kubectl run test-nodeport --rm -i --restart=Never --image=curlimages/curl --timeout=30s -- \
+      curl -k -s -o /dev/null -w "%{http_code}" https://$NODE_IP:$NODEPORT 2>/dev/null || echo "000")
+    
+    if [ "$NODEPORT_STATUS" = "200" ] || [ "$NODEPORT_STATUS" = "302" ] || [ "$NODEPORT_STATUS" = "401" ]; then
+        echo -e "${GREEN}✓ NodePort is accessible (HTTP $NODEPORT_STATUS)${NC}"
+        echo -e "${GREEN}  Node IP: $NODE_IP${NC}"
+        echo -e "${GREEN}  NodePort: $NODEPORT${NC}"
+        echo -e "${GREEN}  Access URL: https://$NODE_IP:$NODEPORT${NC}"
+    else
+        echo -e "${YELLOW}⚠ NodePort test returned HTTP $NODEPORT_STATUS (may be blocked by security groups)${NC}"
+        echo -e "${YELLOW}  NodePort is configured but may not be accessible from outside cluster${NC}"
+    fi
 fi
 
 echo -e "${GREEN}===================================================="
 echo -e "     All smoke tests passed! ✓"
 echo -e "====================================================${NC}"
-

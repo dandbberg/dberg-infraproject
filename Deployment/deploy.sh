@@ -92,18 +92,13 @@ kubectl rollout status deployment/nginx-proxy --timeout=300s
 echo -e "${GREEN}✓ NGINX reverse proxy deployed.${NC}"
 
 ### ---------------------------------------------------
-### 5. Deploy Ingress (for EKS) or NodePort (for minikube)
+### 5. Deploy NodePort Service
 ### ---------------------------------------------------
-# Check if we're on minikube or EKS
-if kubectl get nodes -o jsonpath='{.items[0].metadata.labels}' | grep -q "minikube"; then
-    echo -e "${YELLOW}→ Deploying NodePort service (minikube detected)...${NC}"
-    kubectl apply -f manifests/nginx-service-nodeport.yaml >/dev/null
-    echo -e "${GREEN}✓ NodePort service deployed on port 30443${NC}"
-else
-    echo -e "${YELLOW}→ Deploying Ingress resource (EKS)...${NC}"
-    kubectl apply -f manifests/ingress.yaml >/dev/null
-    echo -e "${GREEN}✓ Ingress deployed${NC}"
-fi
+echo -e "${YELLOW}→ Deploying NodePort service...${NC}"
+
+kubectl apply -f manifests/nginx-service-nodeport.yaml >/dev/null
+
+echo -e "${GREEN}✓ NodePort service deployed on port 30443${NC}"
 
 ### ---------------------------------------------------
 ### 6. Cleanup temporary files
@@ -113,7 +108,6 @@ rm -f tls.key tls.crt
 echo -e "${GREEN}===================================================="
 echo -e "     🎉 Deployment Completed Successfully!"
 echo -e "====================================================${NC}"
-echo -e "${YELLOW}Note: Update the Ingress hostname in manifests/ingress.yaml${NC}"
-echo -e "${YELLOW}      to match your domain and ensure NGINX Ingress Controller${NC}"
-echo -e "${YELLOW}      is installed in your EKS cluster.${NC}"
+echo -e "${YELLOW}NodePort service is exposed on port 30443${NC}"
+echo -e "${YELLOW}Access Keycloak via: https://<NODE_IP>:30443${NC}"
 

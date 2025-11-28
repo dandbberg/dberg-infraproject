@@ -42,40 +42,6 @@ jobs:
 
       - name: Run smoke tests
         run: |
-          echo "Running smoke tests..."
-          
-          # Check if Keycloak deployment is ready
-          kubectl wait --for=condition=available --timeout=300s deployment/keycloak || exit 1
-          echo "✓ Keycloak deployment is ready"
-          
-          # Check if NGINX deployment is ready
-          kubectl wait --for=condition=available --timeout=300s deployment/nginx-proxy || exit 1
-          echo "✓ NGINX deployment is ready"
-          
-          # Check if services exist
-          kubectl get service keycloak || exit 1
-          kubectl get service nginx-proxy || exit 1
-          echo "✓ Services are available"
-          
-          # Check if ingress exists
-          kubectl get ingress nginx-proxy-ingress || exit 1
-          echo "✓ Ingress is configured"
-          
-          # Verify Keycloak is ClusterIP (internal only)
-          SERVICE_TYPE=$(kubectl get service keycloak -o jsonpath='{.spec.type}')
-          if [ "$SERVICE_TYPE" != "ClusterIP" ]; then
-            echo "✗ Keycloak service should be ClusterIP, but is $SERVICE_TYPE"
-            exit 1
-          fi
-          echo "✓ Keycloak service is ClusterIP (internal only)"
-          
-          # Verify NGINX is ClusterIP (exposed via Ingress)
-          NGINX_TYPE=$(kubectl get service nginx-proxy -o jsonpath='{.spec.type}')
-          if [ "$NGINX_TYPE" != "ClusterIP" ]; then
-            echo "✗ NGINX service should be ClusterIP, but is $NGINX_TYPE"
-            exit 1
-          fi
-          echo "✓ NGINX service is ClusterIP (exposed via Ingress)"
-          
-          echo "All smoke tests passed! ✓"
+          cd Deployment
+          ./smoke-test.sh
 
