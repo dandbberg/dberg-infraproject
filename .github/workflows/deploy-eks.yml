@@ -11,7 +11,7 @@ on:
 
 env:
   AWS_REGION: eu-west-1
-  CLUSTER_NAME: dberg-perf-cluster
+  CLUSTER_NAME: dberg-perf-eks
   AWS_ACCOUNT_ID: "919649607464"
   KUBE_NAMESPACE: default
   TF_WORKING_DIR: ./Deployment
