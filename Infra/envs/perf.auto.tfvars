@@ -50,10 +50,11 @@ enable_NoTraffic_irsa                   = true
 NoTraffic_irsa_service_account_name     = "notraffic-notraffic-chart"
 NoTraffic_irsa_service_account_namespace = "default"
 #During new deploy the below ARN's need to be replaced
-NoTraffic_irsa_secretsmanager_arn      = "arn:aws:secretsmanager:eu-west-1:919649607464:secret:rds!db-26c7501a-dfda-4f82-9c37-0f18181ecb92-jgvCkQ"
+#NoTraffic_irsa_secretsmanager_arn      = "arn:aws:secretsmanager:eu-west-1:919649607464:secret:rds!db-26c7501a-dfda-4f82-9c37-0f18181ecb92-jgvCkQ"
 NoTraffic_irsa_kms_key_arn             = "arn:aws:kms:eu-west-1:919649607464:key/1f74d465-77d2-45fd-9561-9c6d9ccb08db"
+
 #
 # ECR Configuration (Docker image repositories)
-enable_ecr                       = true
+enable_ecr                       = false
 ecr_repository_names             = ["notraffic-ecr"]
 ecr_scan_on_push                 = true

@@ -12,6 +12,9 @@ on:
 env:
   AWS_REGION: eu-west-1
   CLUSTER_NAME: dberg-perf-cluster
+  AWS_ACCOUNT_ID: 919649607464
+  KUBE_NAMESPACE: default
+  TF_WORKING_DIR: ./Deployment
 
 jobs:
   deploy:
@@ -25,11 +28,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
+        - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/dberg-perf-github-actions-role
 
       - name: Install kubectl
         uses: azure/setup-kubectl@v3
