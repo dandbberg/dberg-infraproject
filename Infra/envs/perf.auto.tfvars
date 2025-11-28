@@ -38,10 +38,12 @@ enable_rds                      = false
 # kms_enable_key_rotation         = true
 #
 # GitHub Actions Configuration (for CI/CD)
+# IMPORTANT: Update the repository subjects below to match your actual GitHub repository
+# Format: "repo:OWNER/REPO:ref:refs/heads/BRANCH" or "repo:OWNER/REPO:pull_request"
 enable_github_actions            = true
 github_repository_subjects       = [
-  "repo:dandbberg/NoTraffic:ref:refs/heads/main",
-  "repo:dandbberg/NoTraffic:pull_request"
+  "repo:dandbberg/dberg-infraproject:ref:refs/heads/main",
+  "repo:dandbberg/dberg-infraproject:pull_request"
 ]
 github_actions_kubernetes_groups = ["system:masters"]
 
