@@ -47,12 +47,19 @@ else
     exit 1
 fi
 
-# Check if ingress exists
-echo -e "${YELLOW}→ Checking ingress...${NC}"
+# Check if ingress or NodePort exists
+echo -e "${YELLOW}→ Checking external exposure...${NC}"
 if kubectl get ingress nginx-proxy-ingress &>/dev/null; then
     echo -e "${GREEN}✓ Ingress is configured${NC}"
+elif kubectl get service nginx-proxy-nodeport &>/dev/null; then
+    NODEPORT=$(kubectl get service nginx-proxy-nodeport -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "")
+    if [ -n "$NODEPORT" ]; then
+        echo -e "${GREEN}✓ NodePort service is configured on port $NODEPORT${NC}"
+    else
+        echo -e "${YELLOW}⚠ NodePort service found but port not available${NC}"
+    fi
 else
-    echo -e "${YELLOW}⚠ Ingress not found (may not be required)${NC}"
+    echo -e "${YELLOW}⚠ No external exposure method found (Ingress or NodePort)${NC}"
 fi
 
 # Verify Keycloak is ClusterIP (internal only)
@@ -65,13 +72,13 @@ else
     exit 1
 fi
 
-# Verify NGINX is ClusterIP (exposed via Ingress)
-echo -e "${YELLOW}→ Verifying NGINX service type...${NC}"
+# Verify NGINX base service is ClusterIP
+echo -e "${YELLOW}→ Verifying NGINX base service type...${NC}"
 NGINX_TYPE=$(kubectl get service nginx-proxy -o jsonpath='{.spec.type}' 2>/dev/null || echo "")
 if [ "$NGINX_TYPE" = "ClusterIP" ]; then
-    echo -e "${GREEN}✓ NGINX service is ClusterIP (exposed via Ingress)${NC}"
+    echo -e "${GREEN}✓ NGINX base service is ClusterIP${NC}"
 else
-    echo -e "${RED}✗ NGINX service should be ClusterIP, but is $NGINX_TYPE${NC}"
+    echo -e "${RED}✗ NGINX base service should be ClusterIP, but is $NGINX_TYPE${NC}"
     exit 1
 fi
 

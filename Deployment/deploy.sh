@@ -92,13 +92,18 @@ kubectl rollout status deployment/nginx-proxy --timeout=300s
 echo -e "${GREEN}✓ NGINX reverse proxy deployed.${NC}"
 
 ### ---------------------------------------------------
-### 5. Deploy Ingress
+### 5. Deploy Ingress (for EKS) or NodePort (for minikube)
 ### ---------------------------------------------------
-echo -e "${YELLOW}→ Deploying Ingress resource...${NC}"
-
-kubectl apply -f manifests/ingress.yaml >/dev/null
-
-echo -e "${GREEN}✓ Ingress deployed.${NC}"
+# Check if we're on minikube or EKS
+if kubectl get nodes -o jsonpath='{.items[0].metadata.labels}' | grep -q "minikube"; then
+    echo -e "${YELLOW}→ Deploying NodePort service (minikube detected)...${NC}"
+    kubectl apply -f manifests/nginx-service-nodeport.yaml >/dev/null
+    echo -e "${GREEN}✓ NodePort service deployed on port 30443${NC}"
+else
+    echo -e "${YELLOW}→ Deploying Ingress resource (EKS)...${NC}"
+    kubectl apply -f manifests/ingress.yaml >/dev/null
+    echo -e "${GREEN}✓ Ingress deployed${NC}"
+fi
 
 ### ---------------------------------------------------
 ### 6. Cleanup temporary files
