@@ -9,7 +9,7 @@ on:
 
 env:
   AWS_REGION: eu-west-1
-  CLUSTER_NAME: dberg-perf-cluster
+  CLUSTER_NAME: dberg-perf-eks
 
 jobs:
   smoke-test:
