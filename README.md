@@ -158,29 +158,40 @@ The smoke test validates:
 
 ## Accessing Keycloak
 
-### Via NodePort
+### Option 1: Port Forwarding (Recommended for Remote Access)
 
-After deployment, Keycloak is accessible via NodePort on port **30443**:
+Since EKS nodes are deployed in private subnets, use `kubectl port-forward` to access Keycloak from your local machine:
 
-1. Get the node IP:
+```bash
+kubectl port-forward service/nginx-proxy-nodeport 30443:443
+```
+
+Then open in your browser:
+```
+https://localhost:30443
+```
+(Accept the self-signed certificate warning)
+
+Or test with curl:
+```bash
+curl -k https://localhost:30443
+```
+
+### Option 2: Via NodePort (From Within AWS VPC)
+
+If you're accessing from within the AWS VPC (e.g., from the bastion host), you can access directly via NodePort:
+
+1. Get the node's private IP:
    ```bash
    kubectl get nodes -o wide
    ```
 
-2. Access Keycloak:
+2. Access Keycloak from within VPC:
    ```bash
-   # Using node's external IP
-   curl -k https://<NODE_EXTERNAL_IP>:30443
-   
-   # Or using node's internal IP (from within VPC)
-   curl -k https://<NODE_INTERNAL_IP>:30443
+   curl -k https://<NODE_PRIVATE_IP>:30443
    ```
 
-3. Open in browser:
-   ```
-   https://<NODE_EXTERNAL_IP>:30443
-   ```
-   (Accept the self-signed certificate warning)
+**Note:** EKS nodes are in private subnets and don't have public IPs, so direct external access isn't possible without port-forwarding or a load balancer.
 
 ### Internal Access (from within cluster)
 
@@ -258,16 +269,28 @@ kubectl run test-nginx --rm -i --restart=Never --image=curlimages/curl -- \
   curl -k https://nginx-proxy.default.svc.cluster.local
 ```
 
-### Verify NodePort Access
+### Verify NodePort Access (From Within VPC)
 
 ```bash
-# Get node IP
-NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="ExternalIP")].address}')
+# Get node private IP (nodes are in private subnets)
+NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
 NODEPORT=30443
 
-# Test from within cluster (simulating external access)
+# Test from within cluster/VPC only
 kubectl run test-nodeport --rm -i --restart=Never --image=curlimages/curl -- \
   curl -k https://$NODE_IP:$NODEPORT
+```
+
+### Access via Port Forwarding
+
+For remote access from your local machine:
+
+```bash
+# Forward port 30443 to NodePort service
+kubectl port-forward service/nginx-proxy-nodeport 30443:443
+
+# In another terminal, test access
+curl -k https://localhost:30443
 ```
 
 ## Screenshots
