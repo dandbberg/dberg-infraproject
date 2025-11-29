@@ -21,21 +21,21 @@ bastion_sg_eks_rule_port = 443
 # RDS Configuration (optional - not needed for Keycloak with embedded H2 database)
 # Enable RDS only if you want to use external PostgreSQL/MySQL for Keycloak production deployment
 enable_rds                      = false
-# rds_db_identifier               = "app-db"
-# rds_engine                      = "postgres"
-# rds_engine_version              = "17.4"
-# rds_instance_class              = "db.t3.micro"
-# rds_allocated_storage           = 20
-# rds_db_name                     = "keycloak"
-# rds_db_username                 = "keycloakadmin"
-# rds_manage_master_user_password = true  # RDS will manage password in Secrets Manager (secure, no password in git)
-# rds_backup_retention_period     = 7
-# rds_skip_final_snapshot         = true  # Set to false in production
-# rds_deletion_protection         = false  # Set to true in production
+rds_db_identifier               = "app-db"
+rds_engine                      = "postgres"
+rds_engine_version              = "17.4"
+rds_instance_class              = "db.t3.micro"
+rds_allocated_storage           = 20
+rds_db_name                     = "keycloak"
+rds_db_username                 = "keycloakadmin"
+rds_manage_master_user_password = true  # RDS will manage password in Secrets Manager (secure, no password in git)
+rds_backup_retention_period     = 7
+rds_skip_final_snapshot         = true  # Set to false in production
+rds_deletion_protection         = false  # Set to true in production
 #
 # KMS Configuration (only needed if RDS is enabled)
-# kms_deletion_window_in_days     = 30
-# kms_enable_key_rotation         = true
+kms_deletion_window_in_days     = 30
+kms_enable_key_rotation         = true
 #
 # GitHub Actions Configuration (for CI/CD)
 # IMPORTANT: Update the repository subjects below to match your actual GitHub repository
