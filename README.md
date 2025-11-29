@@ -1,13 +1,13 @@
 # AWS EKS Keycloak + NGINX Platform
 
-This repository provisions an end-to-end AWS environment for deploying **Keycloak** behind an **NGINX reverse proxy** on EKS. Terraform builds the network and compute foundation (VPC, EKS, RDS, IAM, ECR, KMS), while GitHub Actions automates Docker image builds and Kubernetes deployments.
+This repository provisions an end-to-end AWS environment for deploying **Keycloak** behind an **NGINX reverse proxy** on EKS. Terraform builds the network and compute foundation (VPC, EKS, IAM, ECR, KMS), while GitHub Actions automates Docker image builds and Kubernetes deployments.
 
 ---
 
 ## Highlights
 
-- **Modular Terraform** (under `Infra/`) creates VPC, Bastion host, EKS cluster, RDS PostgreSQL, ECR, and KMS resources.
-- **Keycloak + NGINX** deployment on EKS with TLS termination and Ingress exposure.
+- **Modular Terraform** (under `Infra/`) creates VPC, Bastion host, EKS cluster, ECR, and KMS resources.
+- **Keycloak + NGINX** deployment on EKS with TLS termination and NodePort exposure.
 - **CI/CD** via GitHub Actions builds Docker images and deploys to EKS using GitHub OIDC to assume AWS roles.
 
 ---
@@ -19,8 +19,7 @@ This repository provisions an end-to-end AWS environment for deploying **Keycloa
 | `vpc` | Dedicated VPC with 3× public + 3× private subnets, IGW, NAT gateways |
 | `bastion_ec2` | Public EC2 instance for SSH/SSM access to private subnets |
 | `eks` | Private EKS cluster with managed node group, IRSA support, GitHub Actions IAM role |
-| `kms` | Customer-managed KMS key encrypting the RDS secret in Secrets Manager (only if RDS is enabled) |
-| `rds` | PostgreSQL instance in private subnets (optional - not needed for Keycloak with embedded H2) |
+| `kms` | Customer-managed KMS key for encryption |
 | `ecr` | Repository for container images |
 
 Remote state is stored in the S3 bucket defined in `terraform { backend "s3" … }`.
@@ -41,7 +40,7 @@ terraform apply -var-file=envs/perf.auto.tfvars
 ```
 Infra/
 ├── envs/                   # perf, qa, prod tfvars
-├── modules/                # bastion_ec2, eks, vpc, kms, rds, ecr
+├── modules/                # bastion_ec2, eks, vpc, kms, ecr
 ├── main.tf                 # module composition
 ├── variables.tf            # global var definitions
 ├── outputs.tf              # outputs consumed by CI/CD and operators
@@ -52,14 +51,14 @@ Deployment/
 │   ├── keycloak.yaml
 │   ├── nginx-deployment.yaml
 │   ├── nginx-config.yaml
-│   └── ingress.yaml
+│   └── nginx-service-nodeport.yaml
 ├── deploy.sh               # Deployment script
 └── smoke-test.sh           # Smoke test script
 
 .github/workflows/
 ├── docker-ecr.yml          # Build + push image to ECR
-├── deploy-eks.yml           # Deploy to EKS cluster
-└── smoke-test.yml           # Run smoke tests
+├── deploy-eks.yml          # Deploy to EKS cluster
+└── smoke-test.yml          # Run smoke tests
 ```
 
 ---
@@ -69,20 +68,15 @@ Deployment/
 ```
 ┌───────────────────────────┐
 │         Client            │
-│   (via Ingress)           │
+│   (via NodePort)          │
 └───────────────┬───────────┘
                 │  HTTPS (TLS)
                 ▼
        ┌───────────────────┐
-       │   NGINX Ingress   │
-       │     Controller    │
-       └─────────┬─────────┘
-                 │
-                 ▼
-       ┌───────────────────┐
-       │     NGINX         │
+       │   NGINX           │
        │   Reverse Proxy   │
        │  (TLS terminated) │
+       │   NodePort:30443  │
        └─────────┬─────────┘
                  │ HTTP (internal only)
                  ▼
@@ -109,8 +103,9 @@ Deployment/
 
 3. **Smoke Tests** 🧪 (`smoke-test.yml`)
    - Validates deployments are ready
-   - Verifies service types (ClusterIP)
-   - Tests internal connectivity
+   - Verifies service types (ClusterIP for Keycloak, NodePort for NGINX)
+   - Tests internal connectivity and NodePort access
+   - Validates OpenID configuration endpoint
 
 ---
 
@@ -131,9 +126,9 @@ cd Deployment
 The script will:
 1. Generate self-signed TLS certificate
 2. Create Keycloak credentials secret
-3. Deploy Keycloak
-4. Deploy NGINX reverse proxy
-5. Deploy Ingress resource
+3. Deploy Keycloak (ClusterIP service)
+4. Deploy NGINX reverse proxy (ClusterIP service)
+5. Deploy NodePort service (exposes NGINX on port 30443)
 
 ### Custom Credentials
 
@@ -151,30 +146,48 @@ export KEYCLOAK_ADMIN_PASSWORD=mypassword
 ./smoke-test.sh
 ```
 
+The smoke test validates:
+- Deployments are ready
+- Services are configured correctly (Keycloak: ClusterIP, NGINX: NodePort)
+- Keycloak is accessible internally
+- NGINX reverse proxy forwards to Keycloak
+- NodePort is accessible
+- OpenID configuration endpoint is working
+
 ---
 
-## Configuration
+## Accessing Keycloak
 
-### Ingress Configuration
+### Via NodePort
 
-Update `Deployment/manifests/ingress.yaml` to match your domain:
+After deployment, Keycloak is accessible via NodePort on port **30443**:
 
-```yaml
-spec:
-  rules:
-    - host: keycloak.yourdomain.com  # Update this
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-```
+1. Get the node IP:
+   ```bash
+   kubectl get nodes -o wide
+   ```
 
-### NGINX Ingress Controller
+2. Access Keycloak:
+   ```bash
+   # Using node's external IP
+   curl -k https://<NODE_EXTERNAL_IP>:30443
+   
+   # Or using node's internal IP (from within VPC)
+   curl -k https://<NODE_INTERNAL_IP>:30443
+   ```
 
-Ensure NGINX Ingress Controller is installed in your EKS cluster:
+3. Open in browser:
+   ```
+   https://<NODE_EXTERNAL_IP>:30443
+   ```
+   (Accept the self-signed certificate warning)
 
+### Internal Access (from within cluster)
+
+Keycloak is accessible internally via NGINX:
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.1/deploy/static/provider/aws/deploy.yaml
+kubectl run test-curl --rm -i --restart=Never --image=curlimages/curl -- \
+  curl -k https://nginx-proxy.default.svc.cluster.local/realms/master/.well-known/openid-configuration
 ```
 
 ---
@@ -196,13 +209,16 @@ kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/cont
 
 **Current Setup:** RDS is **disabled by default** since Keycloak uses embedded H2. Enable RDS only if you need production-grade database persistence.
 
+---
+
 ## Security Notes
 
-- Keycloak is exposed only via NGINX (ClusterIP service)
+- Keycloak is **internal only** (ClusterIP service, not exposed externally)
 - NGINX terminates TLS and forwards to Keycloak over HTTP internally
-- Ingress exposes NGINX to external traffic
+- NodePort exposes NGINX to external traffic on port 30443
 - Keycloak credentials are stored in Kubernetes secrets
-- TLS certificates can be managed via cert-manager for production
+- Self-signed certificates are used for development; use cert-manager or AWS Certificate Manager for production
+- Ensure security groups allow inbound traffic on port 30443 from trusted sources
 
 ---
 
@@ -215,15 +231,42 @@ kubectl delete secret nginx-tls keycloak-credentials
 
 ---
 
-## Differences from NoTraffic (Minikube)
+## Troubleshooting
 
-This project adapts the NoTraffic deployment for EKS:
+### Check NodePort Service
 
-- ✅ Uses **Ingress** instead of NodePort
-- ✅ Uses **ClusterIP** services (not NodePort)
-- ✅ Configured for **EKS** (not minikube)
-- ✅ Includes **GitHub Actions** for CI/CD
-- ✅ Uses **Terraform** for infrastructure provisioning
-- ❌ Removed minikube-specific configurations
-- ❌ Removed VirtualBox/Docker driver dependencies
+```bash
+kubectl get service nginx-proxy-nodeport
+kubectl get service nginx-proxy-nodeport -o yaml
+```
 
+### Check Pod Logs
+
+```bash
+kubectl logs -l app=keycloak
+kubectl logs -l app=nginx-proxy
+```
+
+### Test Internal Connectivity
+
+```bash
+# Test Keycloak directly
+kubectl run test-keycloak --rm -i --restart=Never --image=curlimages/curl -- \
+  curl -s http://keycloak.default.svc.cluster.local:8080
+
+# Test NGINX to Keycloak
+kubectl run test-nginx --rm -i --restart=Never --image=curlimages/curl -- \
+  curl -k https://nginx-proxy.default.svc.cluster.local
+```
+
+### Verify NodePort Access
+
+```bash
+# Get node IP
+NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="ExternalIP")].address}')
+NODEPORT=30443
+
+# Test from within cluster (simulating external access)
+kubectl run test-nodeport --rm -i --restart=Never --image=curlimages/curl -- \
+  curl -k https://$NODE_IP:$NODEPORT
+```
