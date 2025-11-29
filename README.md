@@ -199,8 +199,7 @@ kubectl run test-curl --rm -i --restart=Never --image=curlimages/curl -- \
 1. **Embedded H2 (Default)** - Current configuration uses `start-dev` mode with embedded H2 database
    - ✅ No RDS needed
    - ✅ Simple setup
-   - ⚠️ Data is ephemeral (lost on pod restart)
-   - ⚠️ Not suitable for production
+   - ⚠️ Not suitable for production (Done for assigment only)
 
 2. **External PostgreSQL/MySQL (Production)** - Use RDS for persistent storage
    - Enable RDS in `Infra/envs/*.auto.tfvars` by setting `enable_rds = true`
@@ -270,3 +269,9 @@ NODEPORT=30443
 kubectl run test-nodeport --rm -i --restart=Never --image=curlimages/curl -- \
   curl -k https://$NODE_IP:$NODEPORT
 ```
+
+## Screenshots
+
+![Diagram](./NoTraffic.png)
+![App deploy](./app-deploy.png)
+![smoke test](./smoke-test.png)
